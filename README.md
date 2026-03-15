@@ -1,10 +1,36 @@
-# Hướng dẫn Combo Đổi Mặt + Đổi Giọng khi Live Stream
+# Hướng dẫn Combo Đổi Mặt + Đổi Giọng
 
-Tài liệu hướng dẫn tạo "người ảo" hoàn chỉnh bằng cách kết hợp **đổi mặt real-time** (Deep-Live-Cam / DeepFaceLive) và **đổi giọng real-time** (RVC-WebUI), sau đó phát sóng qua OBS lên TikTok / Facebook.
+Tài liệu hướng dẫn tạo "người ảo" hoàn chỉnh bằng cách kết hợp **đổi mặt** (Deep-Live-Cam / DeepFaceLive) và **đổi giọng** (RVC-WebUI):
+
+- **Phần A:** Xử lý video có sẵn (offline / hậu kỳ)
+- **Phần B:** Phát sóng trực tiếp (live stream) qua OBS lên TikTok / Facebook
 
 ---
 
 ## Tổng quan kiến trúc
+
+### Chế độ Offline (Video có sẵn)
+
+```
+                    Video gốc (.mp4)
+                         │
+          ┌──────────────┴──────────────┐
+          v                             v
+  ┌───────────────┐            ┌───────────────┐
+  │  Deep-Live-Cam│            │ ffmpeg (tách) │
+  │  / roop       │            │      +        │
+  │  (Đổi mặt)   │            │  RVC-WebUI    │
+  │               │            │  (Đổi giọng)  │
+  └───────┬───────┘            └───────┬───────┘
+          │                            │
+          │    ┌───────────────┐       │
+          └───>│ ffmpeg (ghép) │<──────┘
+               │               │
+               │  final.mp4    │
+               └───────────────┘
+```
+
+### Chế độ Live Stream (Real-time)
 
 ```
 ┌──────────┐    ┌─────────────────────┐    ┌──────────────────────┐
@@ -24,6 +50,16 @@ Tài liệu hướng dẫn tạo "người ảo" hoàn chỉnh bằng cách kế
 
 ## Mục lục
 
+### Phần A — Xử lý Video có sẵn (Offline)
+
+- [A1. Tổng quan quy trình offline](#a1-tổng-quan-quy-trình-offline)
+- [A2. Đổi mặt trên video có sẵn](#a2-đổi-mặt-trên-video-có-sẵn)
+- [A3. Đổi giọng trên video có sẵn](#a3-đổi-giọng-trên-video-có-sẵn)
+- [A4. Ghép hình + tiếng thành video hoàn chỉnh](#a4-ghép-hình--tiếng-thành-video-hoàn-chỉnh)
+- [A5. Script tự động hóa toàn bộ quy trình](#a5-script-tự-động-hóa-toàn-bộ-quy-trình)
+
+### Phần B — Live Stream (Real-time)
+
 1. [Yêu cầu phần cứng & phần mềm](#1-yêu-cầu-phần-cứng--phần-mềm)
 2. [Bước 1 – Cài đặt & cấu hình Deep-Live-Cam (Đổi mặt)](#2-bước-1--cài-đặt--cấu-hình-deep-live-cam-đổi-mặt)
 3. [Bước 2 – Cài đặt & cấu hình RVC-WebUI (Đổi giọng)](#3-bước-2--cài-đặt--cấu-hình-rvc-webui-đổi-giọng)
@@ -32,6 +68,372 @@ Tài liệu hướng dẫn tạo "người ảo" hoàn chỉnh bằng cách kế
 6. [Bước 5 – Phát sóng lên TikTok / Facebook](#6-bước-5--phát-sóng-lên-tiktok--facebook)
 7. [Xử lý sự cố thường gặp](#7-xử-lý-sự-cố-thường-gặp)
 8. [Mẹo tối ưu hiệu suất](#8-mẹo-tối-ưu-hiệu-suất)
+
+---
+
+# Phần A — Xử lý Video có sẵn (Offline)
+
+## A1. Tổng quan quy trình offline
+
+Hoàn toàn có thể đổi mặt + đổi giọng trên một video đã quay sẵn. Quy trình gồm 3 bước chính:
+
+```
+                         Video gốc (input.mp4)
+                                │
+               ┌────────────────┼────────────────┐
+               │                                 │
+               v                                 v
+     ┌──────────────────┐              ┌──────────────────┐
+     │  BƯỚC 1: ĐỔI MẶT │              │  BƯỚC 2: ĐỔI GIỌNG│
+     │                    │              │                    │
+     │  Deep-Live-Cam     │              │  ffmpeg (tách audio)│
+     │  hoặc roop         │              │       +             │
+     │                    │              │  RVC-WebUI          │
+     │  input.mp4         │              │                    │
+     │  + ảnh khuôn mặt   │              │  audio gốc → audio │
+     │  → swapped.mp4     │              │  đã đổi giọng      │
+     └────────┬───────────┘              └────────┬───────────┘
+              │                                   │
+              │        ┌──────────────────┐       │
+              └───────>│  BƯỚC 3: GHÉP    │<──────┘
+                       │                  │
+                       │  ffmpeg          │
+                       │  video (đã swap) │
+                       │  + audio (đã đổi)│
+                       │  → final.mp4     │
+                       └──────────────────┘
+```
+
+**So sánh với Live Stream:**
+
+| | Offline (Video có sẵn) | Live Stream |
+|---|---|---|
+| Chất lượng | Cao hơn (xử lý từng frame) | Phụ thuộc tốc độ real-time |
+| Thời gian | Lâu hơn (phải render) | Tức thời |
+| Yêu cầu GPU | Vẫn cần GPU mạnh | Cần GPU mạnh + ổn định |
+| Không cần | VB-Audio, OBS, Virtual Camera | — |
+| Cần thêm | ffmpeg (tách/ghép audio) | OBS, VB-Audio |
+
+---
+
+## A2. Đổi mặt trên video có sẵn
+
+### Cách 1: Dùng Deep-Live-Cam (đơn giản nhất)
+
+Deep-Live-Cam hỗ trợ xử lý file video trực tiếp, không chỉ webcam.
+
+```bash
+git clone https://github.com/hacksider/Deep-Live-Cam.git
+cd Deep-Live-Cam
+pip install -r requirements.txt
+```
+
+**Chạy bằng giao diện (GUI):**
+
+1. Chạy `python run.py`
+2. **Source image:** Chọn ảnh khuôn mặt muốn hoán đổi sang.
+3. **Target:** Chọn **file video** (thay vì webcam) — ví dụ `input.mp4`.
+4. Chọn thư mục output.
+5. Nhấn **Start** và chờ xử lý.
+
+**Chạy bằng dòng lệnh (CLI) — nhanh hơn cho batch processing:**
+
+```bash
+python run.py \
+  --source "anh_khuon_mat.jpg" \
+  --target "input.mp4" \
+  --output "swapped_video.mp4" \
+  --execution-provider cuda \
+  --frame-processor face_swapper
+```
+
+Các tham số quan trọng:
+
+| Tham số | Mô tả |
+|---|---|
+| `--source` | Ảnh khuôn mặt nguồn (ảnh rõ nét, chính diện) |
+| `--target` | File video đầu vào |
+| `--output` | File video đầu ra |
+| `--execution-provider cuda` | Dùng GPU NVIDIA (nhanh hơn nhiều so với CPU) |
+| `--frame-processor face_swapper` | Chỉ swap khuôn mặt |
+| `--frame-processor face_swapper face_enhancer` | Swap + tăng chất lượng mặt |
+| `--keep-fps` | Giữ nguyên FPS gốc |
+| `--keep-audio` | Giữ nguyên audio gốc (chưa đổi giọng) |
+| `--many-faces` | Swap tất cả khuôn mặt trong video (nếu có nhiều người) |
+
+### Cách 2: Dùng roop (công cụ gốc)
+
+```bash
+git clone https://github.com/s0md3v/roop.git
+cd roop
+pip install -r requirements.txt
+```
+
+```bash
+python run.py \
+  --source "anh_khuon_mat.jpg" \
+  --target "input.mp4" \
+  --output "swapped_video.mp4" \
+  --execution-provider cuda
+```
+
+### Cách 3: Dùng DeepFaceLab (chất lượng cao nhất, phức tạp hơn)
+
+DeepFaceLab cho kết quả tốt nhất nhưng cần train model riêng (mất vài giờ đến vài ngày). Phù hợp khi cần chất lượng cao nhất hoặc xử lý video dài.
+
+1. Tải từ: https://github.com/iperov/DeepFaceLab
+2. Quy trình: Extract faces → Train model → Merge vào video.
+3. Tham khảo hướng dẫn chi tiết trên kênh YouTube của dự án.
+
+### So sánh các công cụ đổi mặt cho video offline
+
+| Công cụ | Dễ dùng | Chất lượng | Tốc độ | Phù hợp cho |
+|---|---|---|---|---|
+| **Deep-Live-Cam** | Rất dễ | Tốt | Nhanh | Video ngắn, dùng nhanh |
+| **roop** | Dễ | Tốt | Nhanh | Video ngắn, CLI |
+| **DeepFaceLab** | Khó | Rất tốt | Chậm (cần train) | Video chuyên nghiệp |
+
+---
+
+## A3. Đổi giọng trên video có sẵn
+
+### Bước 3.1: Tách audio ra khỏi video
+
+Dùng **ffmpeg** để tách phần âm thanh:
+
+```bash
+# Tách audio thành file WAV (chất lượng cao, không nén)
+ffmpeg -i input.mp4 -vn -acodec pcm_s16le -ar 44100 -ac 1 audio_goc.wav
+
+# Hoặc nếu đã swap mặt ở bước trước, tách audio từ video gốc
+ffmpeg -i input.mp4 -vn -acodec pcm_s16le -ar 44100 -ac 1 audio_goc.wav
+```
+
+Giải thích tham số:
+
+| Tham số | Mô tả |
+|---|---|
+| `-vn` | Bỏ phần video, chỉ lấy audio |
+| `-acodec pcm_s16le` | Codec WAV không nén |
+| `-ar 44100` | Sample rate 44100 Hz |
+| `-ac 1` | Mono (1 kênh — RVC hoạt động tốt nhất với mono) |
+
+### Bước 3.2: Đổi giọng bằng RVC-WebUI (chế độ file)
+
+1. Chạy RVC-WebUI:
+
+```bash
+cd Retrieval-based-Voice-Conversion-WebUI
+python infer-web.py
+```
+
+2. Truy cập `http://localhost:7865`
+3. Chuyển sang tab **Inference** (không phải tab Real-time).
+4. Cấu hình:
+   - **Model:** Chọn model giọng nói đã tải (file `.pth`).
+   - **Input audio:** Chọn file `audio_goc.wav` vừa tách.
+   - **Transpose (Pitch):** +12 (nam→nữ), -12 (nữ→nam), 0 (giữ cao độ).
+   - **Index file:** Chọn file `.index` tương ứng với model (nếu có).
+   - **Index Rate:** 0.5 – 0.8
+   - **Feature retrieval method:** pm hoặc harvest (harvest chậm hơn nhưng chính xác hơn).
+5. Nhấn **Convert** / **Chuyển đổi**.
+6. Tải file audio đã đổi giọng về — ví dụ: `audio_da_doi.wav`.
+
+### Bước 3.2 (thay thế): Dùng RVC CLI
+
+Nếu muốn tự động hóa bằng dòng lệnh:
+
+```bash
+python tools/infer_cli.py \
+  --f0up_key 12 \
+  --input_path "audio_goc.wav" \
+  --index_path "logs/model_name/added_index.index" \
+  --f0method harvest \
+  --opt_path "audio_da_doi.wav" \
+  --model_name "model_name.pth" \
+  --index_rate 0.66 \
+  --device "cuda:0"
+```
+
+### Bước 3.2 (thay thế 2): Dùng so-vits-svc
+
+Một lựa chọn khác cho đổi giọng offline với chất lượng cao:
+
+```bash
+git clone https://github.com/svc-develop-team/so-vits-svc.git
+cd so-vits-svc
+pip install -r requirements.txt
+```
+
+```bash
+python inference_main.py \
+  -m "logs/model/G_xxx.pth" \
+  -c "configs/config.json" \
+  -n "audio_goc.wav" \
+  -t 0 \
+  -s "speaker_name"
+```
+
+---
+
+## A4. Ghép hình + tiếng thành video hoàn chỉnh
+
+Sau khi có **video đã đổi mặt** (`swapped_video.mp4`) và **audio đã đổi giọng** (`audio_da_doi.wav`), ghép lại bằng ffmpeg:
+
+### Cách 1: Thay thế audio (đơn giản)
+
+```bash
+ffmpeg -i swapped_video.mp4 -i audio_da_doi.wav \
+  -c:v copy -c:a aac -b:a 192k \
+  -map 0:v:0 -map 1:a:0 \
+  -shortest \
+  final_output.mp4
+```
+
+Giải thích:
+
+| Tham số | Mô tả |
+|---|---|
+| `-c:v copy` | Giữ nguyên codec video (không re-encode, nhanh) |
+| `-c:a aac -b:a 192k` | Encode audio thành AAC 192kbps |
+| `-map 0:v:0` | Lấy video stream từ file thứ nhất (swapped_video) |
+| `-map 1:a:0` | Lấy audio stream từ file thứ hai (audio_da_doi) |
+| `-shortest` | Cắt theo file ngắn hơn (phòng trường hợp lệch độ dài) |
+
+### Cách 2: Nếu video đã swap vẫn còn audio cũ, cần xóa audio cũ trước
+
+```bash
+# Xóa audio cũ khỏi video đã swap
+ffmpeg -i swapped_video.mp4 -an -c:v copy swapped_no_audio.mp4
+
+# Ghép audio mới
+ffmpeg -i swapped_no_audio.mp4 -i audio_da_doi.wav \
+  -c:v copy -c:a aac -b:a 192k \
+  -map 0:v:0 -map 1:a:0 \
+  -shortest \
+  final_output.mp4
+```
+
+### Cách 3: Nếu cần đồng bộ (audio bị lệch thời gian)
+
+```bash
+# Thêm delay cho audio (ví dụ: trễ 0.5 giây)
+ffmpeg -i swapped_video.mp4 -i audio_da_doi.wav \
+  -c:v copy -c:a aac -b:a 192k \
+  -map 0:v:0 -map 1:a:0 \
+  -af "adelay=500|500" \
+  -shortest \
+  final_output.mp4
+```
+
+### Kiểm tra kết quả
+
+```bash
+# Xem thông tin file output
+ffmpeg -i final_output.mp4
+
+# Phát thử (nếu có ffplay)
+ffplay final_output.mp4
+```
+
+---
+
+## A5. Script tự động hóa toàn bộ quy trình
+
+Dưới đây là script Bash tổng hợp toàn bộ quy trình xử lý video offline:
+
+```bash
+#!/bin/bash
+# ============================================================
+#  Script: swap_face_voice.sh
+#  Đổi mặt + Đổi giọng cho video có sẵn
+#  Sử dụng: bash swap_face_voice.sh <video_goc> <anh_mat> <rvc_model>
+# ============================================================
+
+VIDEO_INPUT="$1"        # Video gốc (ví dụ: input.mp4)
+FACE_IMAGE="$2"         # Ảnh khuôn mặt (ví dụ: face.jpg)
+RVC_MODEL="$3"          # Tên model RVC (ví dụ: model_name.pth)
+PITCH="${4:-0}"          # Pitch shift, mặc định 0 (tùy chọn)
+
+# Tên file trung gian
+BASENAME=$(basename "$VIDEO_INPUT" .mp4)
+SWAPPED_VIDEO="${BASENAME}_swapped.mp4"
+AUDIO_ORIGINAL="${BASENAME}_audio_goc.wav"
+AUDIO_CONVERTED="${BASENAME}_audio_doi.wav"
+FINAL_OUTPUT="${BASENAME}_final.mp4"
+
+echo "=== BƯỚC 1: Đổi mặt trên video ==="
+cd Deep-Live-Cam
+python run.py \
+  --source "../$FACE_IMAGE" \
+  --target "../$VIDEO_INPUT" \
+  --output "../$SWAPPED_VIDEO" \
+  --execution-provider cuda \
+  --frame-processor face_swapper face_enhancer \
+  --keep-fps
+cd ..
+
+echo "=== BƯỚC 2: Tách audio từ video gốc ==="
+ffmpeg -y -i "$VIDEO_INPUT" -vn -acodec pcm_s16le -ar 44100 -ac 1 "$AUDIO_ORIGINAL"
+
+echo "=== BƯỚC 3: Đổi giọng bằng RVC ==="
+cd Retrieval-based-Voice-Conversion-WebUI
+python tools/infer_cli.py \
+  --f0up_key "$PITCH" \
+  --input_path "../$AUDIO_ORIGINAL" \
+  --opt_path "../$AUDIO_CONVERTED" \
+  --model_name "$RVC_MODEL" \
+  --index_rate 0.66 \
+  --device "cuda:0" \
+  --f0method harvest
+cd ..
+
+echo "=== BƯỚC 4: Ghép video đã swap + audio đã đổi giọng ==="
+ffmpeg -y -i "$SWAPPED_VIDEO" -i "$AUDIO_CONVERTED" \
+  -c:v copy -c:a aac -b:a 192k \
+  -map 0:v:0 -map 1:a:0 \
+  -shortest \
+  "$FINAL_OUTPUT"
+
+echo "=== HOÀN THÀNH ==="
+echo "File output: $FINAL_OUTPUT"
+
+# Dọn file trung gian (tùy chọn)
+# rm -f "$SWAPPED_VIDEO" "$AUDIO_ORIGINAL" "$AUDIO_CONVERTED"
+```
+
+**Cách sử dụng:**
+
+```bash
+chmod +x swap_face_voice.sh
+
+# Cơ bản (giữ nguyên cao độ giọng)
+bash swap_face_voice.sh video_goc.mp4 anh_khuon_mat.jpg model_giong.pth
+
+# Nam chuyển nữ (pitch +12)
+bash swap_face_voice.sh video_goc.mp4 anh_khuon_mat.jpg model_giong.pth 12
+
+# Nữ chuyển nam (pitch -12)
+bash swap_face_voice.sh video_goc.mp4 anh_khuon_mat.jpg model_giong.pth -12
+```
+
+### Xử lý hàng loạt (batch) nhiều video
+
+```bash
+#!/bin/bash
+# Xử lý tất cả file .mp4 trong thư mục hiện tại
+for video in *.mp4; do
+  echo "Đang xử lý: $video"
+  bash swap_face_voice.sh "$video" face.jpg model.pth 0
+done
+```
+
+---
+
+# Phần B — Live Stream (Real-time)
+
+> Phần dưới đây hướng dẫn đổi mặt + đổi giọng **trực tiếp** (real-time) khi live stream.
+> Nếu bạn chỉ cần xử lý video có sẵn, hãy xem [Phần A](#phần-a--xử-lý-video-có-sẵn-offline) ở trên.
 
 ---
 
