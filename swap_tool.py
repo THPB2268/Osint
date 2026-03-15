@@ -130,9 +130,9 @@ def face_swap(
 
     cmd = [
         sys.executable, run_py,
-        "-s", source_image,
-        "-t", target_video,
-        "-o", output_video,
+        "-s", os.path.abspath(source_image),
+        "-t", os.path.abspath(target_video),
+        "-o", os.path.abspath(output_video),
         "--frame-processor", *frame_processors,
         "--execution-provider", execution_provider,
         "--video-encoder", video_encoder,
