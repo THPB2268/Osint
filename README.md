@@ -1,4 +1,82 @@
-# Hướng dẫn Combo Đổi Mặt + Đổi Giọng
+# Swap Tool — Đổi Mặt + Đổi Giọng
+
+Tool tự động đổi mặt và đổi giọng trên video, sử dụng **Deep-Live-Cam** + **RVC-WebUI** + **ffmpeg**.
+
+## Cài đặt nhanh
+
+```bash
+# 1. Clone repo
+git clone <repo-url> && cd <repo>
+
+# 2. Chạy setup (CPU)
+bash setup.sh
+
+# 2b. Hoặc setup với GPU NVIDIA
+bash setup.sh --gpu
+```
+
+## Sử dụng nhanh
+
+```bash
+# Chỉ đổi mặt
+python3 swap_tool.py -s anh_mat.jpg -t video.mp4
+
+# Đổi mặt + GPU NVIDIA
+python3 swap_tool.py -s anh_mat.jpg -t video.mp4 --gpu cuda
+
+# Đổi mặt + tăng chất lượng
+python3 swap_tool.py -s anh_mat.jpg -t video.mp4 --enhance --gpu cuda
+
+# Đổi mặt + đổi giọng (nam → nữ)
+python3 swap_tool.py -s anh_mat.jpg -t video.mp4 --rvc-model model.pth --pitch 12
+
+# Đổi mặt + đổi giọng (nữ → nam)
+python3 swap_tool.py -s anh_mat.jpg -t video.mp4 --rvc-model model.pth --pitch -12
+
+# Xử lý hàng loạt
+python3 swap_tool.py -s anh_mat.jpg --target-dir ./videos/ --output-dir ./output/
+
+# Đổi tất cả khuôn mặt trong video
+python3 swap_tool.py -s anh_mat.jpg -t video.mp4 --many-faces --gpu cuda
+```
+
+## Tham số đầy đủ
+
+| Tham số | Mô tả | Mặc định |
+|---|---|---|
+| `-s`, `--source` | **Bắt buộc.** Ảnh khuôn mặt nguồn (JPG/PNG) | — |
+| `-t`, `--target` | File video đầu vào | — |
+| `--target-dir` | Thư mục video (xử lý hàng loạt) | — |
+| `-o`, `--output` | File video đầu ra | `<tên>_output.mp4` |
+| `--output-dir` | Thư mục đầu ra (hàng loạt) | `./output` |
+| `--gpu` | Execution provider: `cpu`, `cuda`, `coreml`, `rocm` | `cpu` |
+| `--enhance` | Bật face enhancer (GFPGAN) | tắt |
+| `--enhance-model` | Model enhancer: `face_enhancer`, `face_enhancer_gpen256`, `face_enhancer_gpen512` | `face_enhancer` |
+| `--many-faces` | Swap tất cả khuôn mặt | tắt |
+| `--mouth-mask` | Giữ nguyên khẩu hình miệng | tắt |
+| `--video-quality` | Chất lượng video (CRF 0-51, thấp = tốt hơn) | `18` |
+| `--video-encoder` | Codec: `libx264`, `libx265`, `libvpx-vp9` | `libx264` |
+| `--rvc-model` | Model RVC (.pth) — bỏ trống = không đổi giọng | — |
+| `--pitch` | Dịch cao độ: `+12` nam→nữ, `-12` nữ→nam | `0` |
+| `--f0-method` | Phương pháp F0: `pm`, `harvest`, `crepe`, `rmvpe` | `harvest` |
+| `--keep-temp` | Giữ file trung gian | tắt |
+
+## Cấu trúc dự án
+
+```
+.
+├── swap_tool.py          # Tool chính — CLI
+├── setup.sh              # Script cài đặt tự động
+├── requirements.txt      # Python dependencies
+├── Deep-Live-Cam/        # Engine đổi mặt (auto-clone khi setup)
+│   ├── models/           # ONNX models (auto-download)
+│   └── ...
+└── README.md             # Tài liệu này
+```
+
+---
+
+## Hướng dẫn chi tiết
 
 Tài liệu hướng dẫn tạo "người ảo" hoàn chỉnh bằng cách kết hợp **đổi mặt** (Deep-Live-Cam / DeepFaceLive) và **đổi giọng** (RVC-WebUI):
 
