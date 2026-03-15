@@ -1,0 +1,28 @@
+# Deep-Live-Cam (clone khi setup)
+Deep-Live-Cam/
+
+# RVC-WebUI (clone khi setup)
+Retrieval-based-Voice-Conversion-WebUI/
+RVC-WebUI/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Temp/output
+swap_temp/
+output/
+*.wav
+*.mp3
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
